@@ -141,6 +141,8 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
                     return;
                 }
 
+                // ### NOTE: THIS IS AN UNCOMPLETE PROJECT AS MY SAMPLE CARD IS READ PROTECTED
+
                 int ntagPages = NfcIdentifyNtag.getIdentifiedNtagPages();
                 int ntagMemoryBytes = NfcIdentifyNtag.getIdentifiedNtagMemoryBytes();
                 tagIdString = getDec(tag.getId());
