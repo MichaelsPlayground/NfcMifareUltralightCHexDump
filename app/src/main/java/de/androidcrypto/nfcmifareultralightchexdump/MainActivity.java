@@ -70,172 +70,176 @@ public class MainActivity extends AppCompatActivity implements NfcAdapter.Reader
 
         System.out.println("NFC tag discovered");
 
+        MifareUltralight mifareUltralight = null;
         NfcA nfcA = null;
 
-        try {
-            nfcA = NfcA.get(tag);
+        mifareUltralight = MifareUltralight.get(tag);
+        //nfcA = NfcA.get(tag);
 
-            if (nfcA != null) {
+        if (mifareUltralight != null) {
+            runOnUiThread(() -> {
+                Toast.makeText(getApplicationContext(),
+                        "NFC tag is Mifare Ultralight compatible",
+                        Toast.LENGTH_SHORT).show();
+            });
+
+            // Make a Sound
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ((Vibrator) getSystemService(VIBRATOR_SERVICE)).vibrate(VibrationEffect.createOneShot(150, 10));
+            } else {
+                Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                v.vibrate(200);
+            }
+
+            String[] techs = tag.getTechList();
+            boolean isUltralight = false;
+            for (String t : techs) {
+                System.out.println("techlist: " + t + " ***");
+                if (t.contains("MifareClassic")) {
+                    System.out.println("*** Mifare Classic ***"); // it's MIFARE Classic
+                }
+                else if (t.contains("MifareUltralight")) {
+                    System.out.println("*** Mifare Ultralight"); // it's MIFARE Ultralight
+                    isUltralight = true;
+                }
+            }
+
+            //nfcA.connect();
+            dumpExportString = "";
+            runOnUiThread(() -> {
+                readResult.setText("");
+            });
+
+
+            // check that the tag is a NTAG213/215/216 manufactured by NXP - stop if not
+//                String ntagVersion = NfcIdentifyNtag.checkNtagType(nfcA, tag.getId());
+            if (!isUltralight) {
                 runOnUiThread(() -> {
+                    readResult.setText("NFC tag is NOT of type NXP Mifare Ultralight");
                     Toast.makeText(getApplicationContext(),
-                            "NFC tag is Nfca compatible",
+                            "NFC tag is NOT of type NXP Mifare Ultralight",
                             Toast.LENGTH_SHORT).show();
                 });
+                return;
+            }
 
-                // Make a Sound
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    ((Vibrator) getSystemService(VIBRATOR_SERVICE)).vibrate(VibrationEffect.createOneShot(150, 10));
-                } else {
-                    Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-                    v.vibrate(200);
-                }
+            //int nfcaMaxTranceiveLength = nfcA.getMaxTransceiveLength(); // important for the readFast command
 
-                String[] techs = tag.getTechList();
-                boolean isUltralight = false;
-                for (String t : techs) {
-                    System.out.println("techlist: " + t + " ***");
-                    if (t.contains("MifareClassic")) {
-                        System.out.println("*** Mifare Classic ***"); // it's MIFARE Classic
-                    }
-                    else if (t.contains("MifareUltralight")) {
-                        System.out.println("*** Mifare Ultralight"); // it's MIFARE Ultralight
-                        isUltralight = true;
-                    }
-                }
 
-                nfcA.connect();
-                dumpExportString = "";
+
+
+            int mifareUltralightType = mifareUltralight.getType();
+            System.out.println("*** Mifare Ultralight Type: " + mifareUltralightType);
+            // Ultralight is type 0
+            // Ultralight C is type 1
+            // NTAG216 is type 2
+
+
+            // we are working only with Ultralight C tags here
+            if (mifareUltralightType != MifareUltralight.TYPE_ULTRALIGHT_C) {
                 runOnUiThread(() -> {
-                    readResult.setText("");
+                    readResult.setText("NFC tag is NOT of type NXP Mifare Ultralight C");
+                    Toast.makeText(getApplicationContext(),
+                            "NFC tag is NOT of type NXP Mifare Ultralight C",
+                            Toast.LENGTH_SHORT).show();
                 });
+                return;
+            }
 
+            
 
-                // check that the tag is a NTAG213/215/216 manufactured by NXP - stop if not
-//                String ntagVersion = NfcIdentifyNtag.checkNtagType(nfcA, tag.getId());
-                if (!isUltralight) {
-                    runOnUiThread(() -> {
-                        readResult.setText("NFC tag is NOT of type NXP Mifare Ultralight");
-                        Toast.makeText(getApplicationContext(),
-                                "NFC tag is NOT of type NXP Mifare Ultralight",
-                                Toast.LENGTH_SHORT).show();
-                    });
-                    return;
-                }
+            // ### NOTE: THIS IS AN UNCOMPLETE PROJECT AS MY SAMPLE CARD IS READ PROTECTED
 
-                int nfcaMaxTranceiveLength = nfcA.getMaxTransceiveLength(); // important for the readFast command
+            int ntagPages = NfcIdentifyNtag.getIdentifiedNtagPages();
+            int ntagMemoryBytes = NfcIdentifyNtag.getIdentifiedNtagMemoryBytes();
+            tagIdString = getDec(tag.getId());
+            tagTypeString = NfcIdentifyNtag.getIdentifiedNtagType();
+            String nfcaContent = "raw data of " + tagTypeString + "\n" +
+                    "number of pages: " + ntagPages +
+                    " total memory: " + ntagMemoryBytes +
+                    " bytes\n" +
+                    "tag ID: " + bytesToHex(NfcIdentifyNtag.getIdentifiedNtagId()) + "\n" +
+                    "tag ID: " + tagIdString + "\n";
+            //nfcaContent = nfcaContent + "maxTranceiveLength: " + nfcaMaxTranceiveLength + " bytes\n";
+            // read the complete memory depending on ntag type
+            byte[] headerMemory = new byte[16]; // 4 pages of each 4 bytes, e.g. manufacturer data
+            byte[] ntagMemory = new byte[ntagMemoryBytes]; // user memory, 888 byte for a NTAG216
+            byte[] footerMemory = new byte[20]; // 5 pages, e.g. dyn. lock bytes, configuration pages, password & pack
 
-                MifareUltralight mifareUltralight = MifareUltralight.get(tag);
-                int mifareUltralightType = mifareUltralight.getType();
-                System.out.println("*** Mifare Ultralight Type: " + mifareUltralightType);
-                // Ultralight is type 0
-                // Ultralight C is type 1
+            // read the content of the tag in several runs
 
-                // we are working only with Ultralight C tags here
-                if (mifareUltralightType != MifareUltralight.TYPE_ULTRALIGHT_C) {
-                    runOnUiThread(() -> {
-                        readResult.setText("NFC tag is NOT of type NXP Mifare Ultralight C");
-                        Toast.makeText(getApplicationContext(),
-                                "NFC tag is NOT of type NXP Mifare Ultralight C",
-                                Toast.LENGTH_SHORT).show();
-                    });
-                    return;
-                }
+            // first we are reading the header
+            System.out.println("reading the header");
+            headerMemory = getFastTagDataRange(nfcA, 0, 3);
+            if (headerMemory == null) {
+                writeToUiAppend(readResult, "ERROR on reading header, aborted");
+            }
+            String dumpContentHeader = "Header content:\n" + HexDumpOwn.prettyPrint(headerMemory);
 
-                // ### NOTE: THIS IS AN UNCOMPLETE PROJECT AS MY SAMPLE CARD IS READ PROTECTED
+            int footerStart = 4 + ntagPages;
+            int footerEnd = 4 + footerStart;
+            System.out.println("reading the footer");
+            footerMemory = getFastTagDataRange(nfcA, footerStart, footerEnd);
+            if (footerMemory == null) {
+                writeToUiAppend(readResult, "ERROR on reading footer, aborted");
+            }
+            String dumpContentFooter = "Footer content:\n" + HexDumpOwn.prettyPrint(footerMemory);
 
-                int ntagPages = NfcIdentifyNtag.getIdentifiedNtagPages();
-                int ntagMemoryBytes = NfcIdentifyNtag.getIdentifiedNtagMemoryBytes();
-                tagIdString = getDec(tag.getId());
-                tagTypeString = NfcIdentifyNtag.getIdentifiedNtagType();
-                String nfcaContent = "raw data of " + tagTypeString + "\n" +
-                        "number of pages: " + ntagPages +
-                        " total memory: " + ntagMemoryBytes +
-                        " bytes\n" +
-                        "tag ID: " + bytesToHex(NfcIdentifyNtag.getIdentifiedNtagId()) + "\n" +
-                        "tag ID: " + tagIdString + "\n";
-                nfcaContent = nfcaContent + "maxTranceiveLength: " + nfcaMaxTranceiveLength + " bytes\n";
-                // read the complete memory depending on ntag type
-                byte[] headerMemory = new byte[16]; // 4 pages of each 4 bytes, e.g. manufacturer data
-                byte[] ntagMemory = new byte[ntagMemoryBytes]; // user memory, 888 byte for a NTAG216
-                byte[] footerMemory = new byte[20]; // 5 pages, e.g. dyn. lock bytes, configuration pages, password & pack
+            byte[] response;
+            try {
+                //int nfcaMaxTranceiveLength = nfcA.getMaxTransceiveLength(); // my device: 253 bytes
+                //int nfcaMaxTranceive4ByteTrunc = nfcaMaxTranceiveLength / 4; // 63
+                int nfcaMaxTranceive4ByteTrunc = 63; // this is manual setting
+                int nfcaMaxTranceive4ByteLength = nfcaMaxTranceive4ByteTrunc * 4; // 252 bytes
+                int nfcaNrOfFullReadings = ntagMemoryBytes / nfcaMaxTranceive4ByteLength; // 888 bytes / 252 bytes = 3 full readings
+                int nfcaTotalFullReadingBytes = nfcaNrOfFullReadings * nfcaMaxTranceive4ByteLength; // 3 * 252 = 756
+                int nfcaMaxTranceiveModuloLength = ntagMemoryBytes - nfcaTotalFullReadingBytes; // 888 bytes - 756 bytes = 132 bytes
+                nfcaContent = nfcaContent + "nfcaMaxTranceive4ByteTrunc: " + nfcaMaxTranceive4ByteTrunc + "\n";
+                nfcaContent = nfcaContent + "nfcaMaxTranceive4ByteLength: " + nfcaMaxTranceive4ByteLength + "\n";
+                nfcaContent = nfcaContent + "nfcaNrOfFullReadings: " + nfcaNrOfFullReadings + "\n";
+                nfcaContent = nfcaContent + "nfcaTotalFullReadingBytes: " + nfcaTotalFullReadingBytes + "\n";
+                nfcaContent = nfcaContent + "nfcaMaxTranceiveModuloLength: " + nfcaMaxTranceiveModuloLength + "\n";
 
-                // read the content of the tag in several runs
-
-                // first we are reading the header
-                System.out.println("reading the header");
-                headerMemory = getFastTagDataRange(nfcA, 0, 3);
-                if (headerMemory == null) {
-                    writeToUiAppend(readResult, "ERROR on reading header, aborted");
-                }
-                String dumpContentHeader = "Header content:\n" + HexDumpOwn.prettyPrint(headerMemory);
-
-                int footerStart = 4 + ntagPages;
-                int footerEnd = 4 + footerStart;
-                System.out.println("reading the footer");
-                footerMemory = getFastTagDataRange(nfcA, footerStart, footerEnd);
-                if (footerMemory == null) {
-                    writeToUiAppend(readResult, "ERROR on reading footer, aborted");
-                }
-                String dumpContentFooter = "Footer content:\n" + HexDumpOwn.prettyPrint(footerMemory);
-
-                byte[] response;
-                try {
-                    //int nfcaMaxTranceiveLength = nfcA.getMaxTransceiveLength(); // my device: 253 bytes
-                    int nfcaMaxTranceive4ByteTrunc = nfcaMaxTranceiveLength / 4; // 63
-                    int nfcaMaxTranceive4ByteLength = nfcaMaxTranceive4ByteTrunc * 4; // 252 bytes
-                    int nfcaNrOfFullReadings = ntagMemoryBytes / nfcaMaxTranceive4ByteLength; // 888 bytes / 252 bytes = 3 full readings
-                    int nfcaTotalFullReadingBytes = nfcaNrOfFullReadings * nfcaMaxTranceive4ByteLength; // 3 * 252 = 756
-                    int nfcaMaxTranceiveModuloLength = ntagMemoryBytes - nfcaTotalFullReadingBytes; // 888 bytes - 756 bytes = 132 bytes
-                    nfcaContent = nfcaContent + "nfcaMaxTranceive4ByteTrunc: " + nfcaMaxTranceive4ByteTrunc + "\n";
-                    nfcaContent = nfcaContent + "nfcaMaxTranceive4ByteLength: " + nfcaMaxTranceive4ByteLength + "\n";
-                    nfcaContent = nfcaContent + "nfcaNrOfFullReadings: " + nfcaNrOfFullReadings + "\n";
-                    nfcaContent = nfcaContent + "nfcaTotalFullReadingBytes: " + nfcaTotalFullReadingBytes + "\n";
-                    nfcaContent = nfcaContent + "nfcaMaxTranceiveModuloLength: " + nfcaMaxTranceiveModuloLength + "\n";
-
-                    for (int i = 0; i < nfcaNrOfFullReadings; i++) {
-                        System.out.println("starting round: " + i);
-                        response = getFastTagDataRange(nfcA, (4 + (nfcaMaxTranceive4ByteTrunc * i)), (4 + (nfcaMaxTranceive4ByteTrunc * (i + 1)) - 1));
-                        if (response == null) {
-                            writeToUiAppend(readResult, "ERROR on reading user memory, aborted");
-                        } else {
-                            // success: response contains ACK or actual data
-                            System.arraycopy(response, 0, ntagMemory, (nfcaMaxTranceive4ByteLength * i), nfcaMaxTranceive4ByteLength);
-                        }
-                    } // for
-
-                    // now we read the nfcaMaxTranceiveModuloLength bytes, for a NTAG216 = 132 bytes
-                    response = getFastTagDataRange(nfcA, (4 + (nfcaMaxTranceive4ByteTrunc * nfcaNrOfFullReadings)), (4 + (nfcaMaxTranceive4ByteTrunc * nfcaNrOfFullReadings) + (nfcaMaxTranceiveModuloLength / 4)));
+                for (int i = 0; i < nfcaNrOfFullReadings; i++) {
+                    System.out.println("starting round: " + i);
+                    response = getFastTagDataRange(nfcA, (4 + (nfcaMaxTranceive4ByteTrunc * i)), (4 + (nfcaMaxTranceive4ByteTrunc * (i + 1)) - 1));
                     if (response == null) {
                         writeToUiAppend(readResult, "ERROR on reading user memory, aborted");
                     } else {
                         // success: response contains ACK or actual data
-                        System.arraycopy(response, 0, ntagMemory, (nfcaMaxTranceive4ByteLength * nfcaNrOfFullReadings), nfcaMaxTranceiveModuloLength);
+                        System.arraycopy(response, 0, ntagMemory, (nfcaMaxTranceive4ByteLength * i), nfcaMaxTranceive4ByteLength);
                     }
-                    nfcaContent = nfcaContent + "fast reading complete: " + "\n" + bytesToHex(ntagMemory) + "\n";
+                } // for
 
-                    String finalNfcaRawText = nfcaContent;
-                    String dumpContent = dumpContentHeader + "\n\nUser memory content:\n" + HexDumpOwn.prettyPrint(ntagMemory);
-                    dumpContent = dumpContent + "\n\n" + dumpContentFooter;
-                    System.out.println(dumpContent);
-                    dumpExportString = dumpContent;
-                    String finalDumpContent = dumpContent;
-                    runOnUiThread(() -> {
-                        dumpField.setText(finalDumpContent);
-                        readResult.setText(finalNfcaRawText);
-                        System.out.println(finalNfcaRawText);
-                    });
+                // now we read the nfcaMaxTranceiveModuloLength bytes, for a NTAG216 = 132 bytes
+                response = getFastTagDataRange(nfcA, (4 + (nfcaMaxTranceive4ByteTrunc * nfcaNrOfFullReadings)), (4 + (nfcaMaxTranceive4ByteTrunc * nfcaNrOfFullReadings) + (nfcaMaxTranceiveModuloLength / 4)));
+                if (response == null) {
+                    writeToUiAppend(readResult, "ERROR on reading user memory, aborted");
+                } else {
+                    // success: response contains ACK or actual data
+                    System.arraycopy(response, 0, ntagMemory, (nfcaMaxTranceive4ByteLength * nfcaNrOfFullReadings), nfcaMaxTranceiveModuloLength);
+                }
+                nfcaContent = nfcaContent + "fast reading complete: " + "\n" + bytesToHex(ntagMemory) + "\n";
 
-                } finally {
-                    try {
-                        nfcA.close();
-                    } catch (IOException e) {
-                        writeToUiAppend(readResult, "ERROR IOException: " + e);
-                    }
+                String finalNfcaRawText = nfcaContent;
+                String dumpContent = dumpContentHeader + "\n\nUser memory content:\n" + HexDumpOwn.prettyPrint(ntagMemory);
+                dumpContent = dumpContent + "\n\n" + dumpContentFooter;
+                System.out.println(dumpContent);
+                dumpExportString = dumpContent;
+                String finalDumpContent = dumpContent;
+                runOnUiThread(() -> {
+                    dumpField.setText(finalDumpContent);
+                    readResult.setText(finalNfcaRawText);
+                    System.out.println(finalNfcaRawText);
+                });
+
+            } finally {
+                try {
+                    nfcA.close();
+                } catch (IOException e) {
+                    writeToUiAppend(readResult, "ERROR IOException: " + e);
                 }
             }
-        } catch (IOException e) {
-            writeToUiAppend(readResult, "ERROR IOException: " + e);
-            e.printStackTrace();
         }
     }
 
